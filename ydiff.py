@@ -368,11 +368,16 @@ class DiffParser(object):
 
 class DiffMarker(object):
 
-    def __init__(self, side_by_side=False, width=0, tab_width=8, wrap=False):
+    def __init__(self, side_by_side=False, width=0, tab_width=8, wrap=False,
+                 change_style='underline'):
         self._side_by_side = side_by_side
         self._width = width
         self._tab_width = tab_width
         self._wrap = wrap
+        if change_style == 'highlight':
+            # We call it 'reverse' in COLORS
+            change_style = 'reverse'
+        self._change_style = change_style
 
     def markup(self, diff):
         """Returns a generator"""
@@ -438,6 +443,7 @@ class DiffMarker(object):
             meantime
             """
             out = [COLORS[base_color]]
+            change_style = COLORS[self._change_style]
             tag_re = re.compile(r'\x00[+^-]|\x01')
 
             while text:
@@ -448,7 +454,7 @@ class DiffMarker(object):
                     out.append(COLORS['reverse'] + COLORS[base_color])
                     text = text[2:]
                 elif text.startswith('\x00^'):  # change
-                    out.append(COLORS['underline'] + COLORS[base_color])
+                    out.append(change_style + COLORS[base_color])
                     text = text[2:]
                 elif text.startswith('\x01'):   # reset
                     if len(text) > 1:
@@ -607,7 +613,7 @@ class DiffMarker(object):
     def _markup_mix(self, line, base_color):
         del_code = COLORS['reverse'] + COLORS[base_color]
         add_code = COLORS['reverse'] + COLORS[base_color]
-        chg_code = COLORS['underline'] + COLORS[base_color]
+        chg_code = COLORS[self._change_style] + COLORS[base_color]
         rst_code = COLORS['reset'] + COLORS[base_color]
         line = line.replace('\x00-', del_code)
         line = line.replace('\x00+', add_code)
@@ -638,7 +644,8 @@ def markup_to_pager(stream, opts):
     diffs = DiffParser(stream).get_diff_generator()
     for diff in diffs:
         marker = DiffMarker(side_by_side=opts.side_by_side, width=opts.width,
-                            tab_width=opts.tab_width, wrap=opts.wrap)
+                            tab_width=opts.tab_width, wrap=opts.wrap,
+                            change_style=opts.change_style)
         color_diff = marker.markup(diff)
         for line in color_diff:
             pager.stdin.write(line.encode('utf-8'))
@@ -744,6 +751,10 @@ def main():
     parser.add_option(
         '-c', '--color', default='auto', metavar='M',
         help="""colorize mode 'auto' (default), 'always', or 'never'""")
+    parser.add_option(
+        '-S', '--change-style', default='underline', metavar="STYLE",
+        type='choice', choices=('underline', 'highlight'),
+        help="""style for "changed" hunks 'underline' (default), or 'highlight'""")
     parser.add_option(
         '-t', '--tab-width', type='int', default=8, metavar='N',
         help="""convert tab characters to this many spaces (default: 8)""")
