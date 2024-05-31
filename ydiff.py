@@ -97,8 +97,10 @@ def revision_control_log(vcs_name, args):
         return subprocess.Popen(cmd + args, stdout=subprocess.PIPE).stdout
 
 
-def colorize(text, start_color, end_color='reset'):
-    return COLORS[start_color] + text + COLORS[end_color]
+def colorize(text, start_color, end_color='reset', raw_start_color=False):
+    if not raw_start_color:
+        start_color = COLORS[start_color]
+    return start_color + text + COLORS[end_color]
 
 
 def strsplit(text, width):
@@ -403,20 +405,29 @@ class DiffMarker(object):
             for old, new, changed in hunk.mdiff():
                 if changed:
                     if not old[0]:
-                        # The '+' char after \x00 is kept
                         # DEBUG: yield 'NEW: %s %s\n' % (old, new)
                         line = new[1].strip('\x00\x01')
-                        yield self._markup_new(line)
+                        # remove '+' character
+                        if line.startswith('+'):
+                            yield (self._markup_new('+', highlight=False) +
+                                   self._markup_new(line[1:], highlight=True))
+                        else:
+                            yield self._markup_new(line, highlight=True)
+
                     elif not new[0]:
-                        # The '-' char after \x00 is kept
                         # DEBUG: yield 'OLD: %s %s\n' % (old, new)
                         line = old[1].strip('\x00\x01')
-                        yield self._markup_old(line)
+                        # remove '-' character
+                        if line.startswith('-'):
+                            yield (self._markup_old('-', highlight=False) +
+                                   self._markup_old(line[1:], highlight=True))
+                        else:
+                            yield self._markup_old(line, highlight=True)
                     else:
                         # DEBUG: yield 'CHG: %s %s\n' % (old, new)
-                        yield (self._markup_old('-') +
+                        yield (self._markup_old('-', highlight=False) +
                                self._markup_mix(old[1], 'red'))
-                        yield (self._markup_new('+') +
+                        yield (self._markup_new('+', highlight=False) +
                                self._markup_mix(new[1], 'green'))
                 else:
                     yield self._markup_common(' ' + old[1])
@@ -535,12 +546,12 @@ class DiffMarker(object):
                         right = right.rstrip('\x01')
                         if right.startswith('\x00+'):
                             right = right[2:]
-                        right = self._markup_new(right)
+                        right = self._markup_new(right, highlight=True)
                     elif not new[0]:
                         left = left.rstrip('\x01')
                         if left.startswith('\x00-'):
                             left = left[2:]
-                        left = self._markup_old(left)
+                        left = self._markup_old(left, highlight=True)
                         right = ''
                     else:
                         left = _fit_with_marker_mix(left, 'red')
@@ -608,11 +619,19 @@ class DiffMarker(object):
     def _markup_common(self, line):
         return colorize(line, 'reset')
 
-    def _markup_old(self, line):
-        return colorize(line, 'lightred')
+    def _markup_old(self, line, highlight=False):
+        if highlight and self._highlight_line:
+            return colorize(line, COLORS['reverse'] + COLORS['red'],
+                            raw_start_color=True)
+        else:
+            return colorize(line, 'lightred')
 
-    def _markup_new(self, line):
-        return colorize(line, 'green')
+    def _markup_new(self, line, highlight=False):
+        if highlight and  self._highlight_line:
+            return colorize(line, COLORS['reverse'] + COLORS['green'],
+                            raw_start_color=True)
+        else:
+            return colorize(line, 'green')
 
     def _markup_mix(self, line, base_color):
         del_code = COLORS['reverse'] + COLORS[base_color]
